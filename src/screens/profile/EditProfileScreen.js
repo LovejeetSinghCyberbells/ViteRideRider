@@ -1,312 +1,388 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Modal, Pressable } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialDesignIcons from '@react-native-vector-icons/material-icons';
 import colors from '../../common/Colors';
 import CommonButton from '../../components/CommonButton';
 import CommonTextField from '../../components/CommonTextField';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import { useDispatch, useSelector } from 'react-redux';
+import { editProfile } from '../../redux/fetures/getProfileSlice'; // Imported from profileSlice
 
 export default function EditProfileScreen({ navigation }) {
-    const [profileImage, setProfileImage] = useState(null);
-    const [showImageOptions, setShowImageOptions] = useState(false);
+  const dispatch = useDispatch();
+  const { userProfile, profileLoading } = useSelector(state => state.profile);
 
-    const handleEditImage = () => setShowImageOptions(true);
+  // Form inputs loaded from userProfile inside profile state
+  const [name, setName] = useState(userProfile?.name || '');
+  const [phone, setPhone] = useState(userProfile?.phone || '');
+  const [address, setAddress] = useState(userProfile?.address || '');
+  const [profileImage, setProfileImage] = useState(
+    userProfile?.profilePicture || null,
+  );
+  const [imageFileObject, setImageFileObject] = useState(null);
+  const [showImageOptions, setShowImageOptions] = useState(false);
 
-    const openGallery = () => {
-        setShowImageOptions(false);
-        setTimeout(() => {
-            launchImageLibrary(
-                { mediaType: 'photo', quality: 0.8, selectionLimit: 1 },
-                response => {
-                    if (response.didCancel || response.errorCode) return;
-                    const asset = response.assets?.[0];
-                    if (asset?.uri) setProfileImage(asset.uri);
-                }
-            );
-        }, 300);
-    };
+  const handleEditImage = () => setShowImageOptions(true);
 
-    const openCamera = () => {
-        setShowImageOptions(false);
-        setTimeout(() => {
-            launchCamera(
-                { mediaType: 'photo', quality: 0.8, saveToPhotos: false },
-                response => {
-                    if (response.didCancel || response.errorCode) return;
-                    const asset = response.assets?.[0];
-                    if (asset?.uri) setProfileImage(asset.uri);
-                }
-            );
-        }, 300);
-    };
-    return (
-        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+  const processImageResponse = response => {
+    if (response.didCancel || response.errorCode) return;
+    const asset = response.assets?.[0];
+    if (asset?.uri) {
+      setProfileImage(asset.uri);
+      setImageFileObject({
+        uri: asset.uri,
+        name: asset.fileName || `profile_${Date.now()}.jpg`,
+        type: asset.type || 'image/jpeg',
+      });
+    }
+  };
 
-            <View style={styles.screenHeader}>
-                <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.goBack()}>
-                    <MaterialDesignIcons name="arrow-back-ios" size={24} color={colors.whiteColor} />
-                </TouchableOpacity>
-                <Text style={styles.screenTitle}>Edit Profile</Text>
-                <View style={{ width: 24 }} />
+  const openGallery = () => {
+    setShowImageOptions(false);
+    setTimeout(() => {
+      launchImageLibrary(
+        { mediaType: 'photo', quality: 0.8, selectionLimit: 1 },
+        response => processImageResponse(response),
+      );
+    }, 300);
+  };
+
+  const openCamera = () => {
+    setShowImageOptions(false);
+    setTimeout(() => {
+      launchCamera(
+        { mediaType: 'photo', quality: 0.8, saveToPhotos: false },
+        response => processImageResponse(response),
+      );
+    }, 300);
+  };
+
+  const handleSubmit = () => {
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('phone', phone);
+    formData.append('address', address);
+
+    if (imageFileObject) {
+      formData.append('profilePicture', imageFileObject);
+    }
+
+    dispatch(editProfile(formData))
+      .unwrap()
+      .then(() => {
+        Alert.alert('Success', 'Profile updated successfully!');
+        navigation.goBack();
+      })
+      .catch(err => {
+        Alert.alert('Error', err || 'Something went wrong.');
+      });
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <View style={styles.screenHeader}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialDesignIcons
+            name="arrow-back-ios"
+            size={24}
+            color={colors.whiteColor}
+          />
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Edit Profile</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatarWrapper}>
+            <Image
+              source={
+                profileImage
+                  ? { uri: profileImage }
+                  : require('../../assets/images/profile.png')
+              }
+              style={styles.profileImage}
+              resizeMode="cover"
+            />
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.editImageButton}
+            onPress={handleEditImage}
+          >
+            <MaterialDesignIcons
+              name="edit"
+              size={14}
+              color={colors.whiteColor}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Name</Text>
+          <CommonTextField
+            placeholder={'Please Enter Your Name.'}
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
+
+        <View style={styles.fieldGroupSpaced}>
+          <Text style={styles.fieldLabel}>Email</Text>
+          <CommonTextField
+            placeholder={'Please Enter Your Email.'}
+            value={userProfile?.email || ''}
+            editable={false}
+            style={{ opacity: 0.6 }}
+          />
+        </View>
+
+        <View style={styles.fieldGroupSpaced}>
+          <Text style={styles.fieldLabel}>Phone Number</Text>
+          <CommonTextField
+            placeholder={'Please Enter Your Phone Number.'}
+            value={phone}
+            onChangeText={setPhone}
+          />
+        </View>
+
+        <View style={styles.fieldGroupSpaced}>
+          <Text style={styles.fieldLabel}>Address</Text>
+          <CommonTextField
+            placeholder={'Please Enter Your Address.'}
+            value={address}
+            onChangeText={setAddress}
+          />
+        </View>
+
+        {profileLoading ? (
+          <ActivityIndicator
+            size="large"
+            color={colors.secondaryColor}
+            style={{ marginTop: 40 }}
+          />
+        ) : (
+          <CommonButton
+            onPress={handleSubmit}
+            title={'Submit'}
+            textColor={colors.whiteColor}
+            color={colors.secondaryColor}
+            style={{ marginTop: 40 }}
+          />
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={showImageOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowImageOptions(false)}
+      >
+        <Pressable
+          style={styles.alertOverlay}
+          onPress={() => setShowImageOptions(false)}
+        >
+          <Pressable style={styles.alertBox} onPress={() => {}}>
+            <View style={styles.alertIconCircle}>
+              <MaterialDesignIcons
+                name="add-a-photo"
+                size={26}
+                color={colors.primaryColor}
+              />
             </View>
-
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+            <Text style={styles.alertTitle}>Add Profile Photo</Text>
+            <Text style={styles.alertSubtitle}>
+              Choose how you'd like to add your profile picture
+            </Text>
+            <View style={styles.alertDivider} />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.alertOptionRow}
+              onPress={openCamera}
             >
-                <View style={styles.avatarContainer}>
-                    <View style={styles.avatarWrapper}>
-                        <Image
-                            source={
-                                profileImage
-                                    ? { uri: profileImage }
-                                    : require('../../assets/images/profile.png')
-                            }
-                            style={styles.profileImage}
-                            resizeMode='cover'
-                        />
-                    </View>
-                    <TouchableOpacity activeOpacity={0.8} style={styles.editImageButton} onPress={handleEditImage}>
-                        <MaterialDesignIcons name="edit" size={14} color={colors.whiteColor} />
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Name</Text>
-                    <CommonTextField placeholder={'Please Enter Your Name.'} />
-                </View>
-
-                <View style={styles.fieldGroupSpaced}>
-                    <Text style={styles.fieldLabel}>Email</Text>
-                    <CommonTextField placeholder={'Please Enter Your Email.'} />
-                </View>
-
-                <View style={styles.fieldGroupSpaced}>
-                    <Text style={styles.fieldLabel}>Phone Number</Text>
-                    <CommonTextField placeholder={'Please Enter Your Phone Number.'} />
-                </View>
-
-                <View style={styles.fieldGroupSpaced}>
-                    <Text style={styles.fieldLabel}>Address</Text>
-                    <CommonTextField placeholder={'Please Enter Your Address.'} />
-                </View>
-
-                <CommonButton
-                    onPress={() => { }}
-                    title={'Submit'}
-                    textColor={colors.whiteColor}
-                    color={colors.secondaryColor}
-                    style={{ marginTop: 40 }}
+              <View style={styles.alertOptionIcon}>
+                <MaterialDesignIcons
+                  name="camera-alt"
+                  size={20}
+                  color={colors.primaryColor}
                 />
-
-            </ScrollView>
-            <Modal
-                visible={showImageOptions}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowImageOptions(false)}
+              </View>
+              <Text style={styles.alertOptionText}>Take Photo</Text>
+            </TouchableOpacity>
+            <View style={styles.alertOptionDivider} />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.alertOptionRow}
+              onPress={openGallery}
             >
-                <Pressable style={styles.alertOverlay} onPress={() => setShowImageOptions(false)}>
-                    <Pressable style={styles.alertBox} onPress={() => { }}>
-
-                        <View style={styles.alertIconCircle}>
-                            <MaterialDesignIcons name="add-a-photo" size={26} color={colors.primaryColor} />
-                        </View>
-
-                        <Text style={styles.alertTitle}>Add Profile Photo</Text>
-                        <Text style={styles.alertSubtitle}>Choose how you'd like to add your profile picture</Text>
-
-                        <View style={styles.alertDivider} />
-
-                        <TouchableOpacity activeOpacity={0.8} style={styles.alertOptionRow} onPress={openCamera}>
-                            <View style={styles.alertOptionIcon}>
-                                <MaterialDesignIcons name="camera-alt" size={20} color={colors.primaryColor} />
-                            </View>
-                            <Text style={styles.alertOptionText}>Take Photo</Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.alertOptionDivider} />
-
-                        <TouchableOpacity activeOpacity={0.8} style={styles.alertOptionRow} onPress={openGallery}>
-                            <View style={styles.alertOptionIcon}>
-                                <MaterialDesignIcons name="photo-library" size={20} color={colors.primaryColor} />
-                            </View>
-                            <Text style={styles.alertOptionText}>Choose from Gallery</Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.alertDivider} />
-
-                        <TouchableOpacity
-                            activeOpacity={0.8}
-                            style={styles.alertCancelRow}
-                            onPress={() => setShowImageOptions(false)}
-                        >
-                            <Text style={styles.alertCancelText}>Cancel</Text>
-                        </TouchableOpacity>
-
-                    </Pressable>
-                </Pressable>
-            </Modal>
-        </SafeAreaView>
-    )
+              <View style={styles.alertOptionIcon}>
+                <MaterialDesignIcons
+                  name="photo-library"
+                  size={20}
+                  color={colors.primaryColor}
+                />
+              </View>
+              <Text style={styles.alertOptionText}>Choose from Gallery</Text>
+            </TouchableOpacity>
+            <View style={styles.alertDivider} />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.alertCancelRow}
+              onPress={() => setShowImageOptions(false)}
+            >
+              <Text style={styles.alertCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </SafeAreaView>
+  );
 }
 
-
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: colors.primaryColor,
-        paddingTop: 50,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingBottom: 50,
-        backgroundColor: colors.primaryColor,
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        alignItems: 'center'
-    },
-
-    screenHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        marginBottom: 4,
-    },
-    screenTitle: {
-        fontSize: 18,
-        lineHeight: 28,
-        fontWeight: '600',
-        color: colors.whiteColor,
-        flex: 1,
-        textAlign: 'center',
-    },
-    avatarContainer: {
-        width: 120,
-        height: 120,
-        marginBottom: 24,
-    },
-    avatarWrapper: {
-        width: 120,
-        height: 120,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: colors.whiteColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    profileImage: {
-        width: 105,
-        height: 105,
-        borderRadius: 16,
-    },
-    editImageButton: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        backgroundColor: colors.secondaryColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: colors.primaryColor,
-    },
-    fieldGroup: {
-        width: '100%',
-        gap: 8,
-    },
-    fieldGroupSpaced: {
-        width: '100%',
-        gap: 8,
-        marginTop: 20,
-    },
-    fieldLabel: {
-        fontSize: 16,
-        fontWeight: '500',
-        lineHeight: 20,
-        color: colors.whiteColor,
-    },
-    alertOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.55)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 40,
-    },
-    alertBox: {
-        width: '100%',
-        backgroundColor: colors.whiteColor,
-        borderRadius: 20,
-        overflow: 'hidden',
-        alignItems: 'center',
-        paddingTop: 24,
-    },
-    alertIconCircle: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: colors.lightPurpleColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
-    },
-    alertTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.primaryColor,
-        marginBottom: 6,
-    },
-    alertSubtitle: {
-        fontSize: 13,
-        color: colors.darkGrey,
-        textAlign: 'center',
-        lineHeight: 18,
-        paddingHorizontal: 16,
-        marginBottom: 20,
-    },
-    alertDivider: {
-        height: 0.5,
-        backgroundColor: colors.lightGreyColor,
-        width: '100%',
-    },
-    alertOptionRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        width: '100%',
-        paddingVertical: 14,
-        paddingHorizontal: 24,
-    },
-    alertOptionIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: colors.lightPurpleColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    alertOptionText: {
-        fontSize: 15,
-        fontWeight: '500',
-        color: colors.primaryColor,
-    },
-    alertOptionDivider: {
-        height: 0.5,
-        backgroundColor: colors.lightGreyColor,
-        width: '100%',
-    },
-    alertCancelRow: {
-        width: '100%',
-        paddingVertical: 15,
-        alignItems: 'center',
-    },
-    alertCancelText: {
-        fontSize: 15,
-        fontWeight: '500',
-        color: colors.darkGrey,
-    },
+  safeArea: { flex: 1, backgroundColor: colors.primaryColor, paddingTop: 50 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 50,
+    backgroundColor: colors.primaryColor,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    alignItems: 'center',
+  },
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  screenTitle: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: colors.whiteColor,
+    flex: 1,
+    textAlign: 'center',
+  },
+  avatarContainer: { width: 120, height: 120, marginBottom: 24 },
+  avatarWrapper: {
+    width: 120,
+    height: 120,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.whiteColor,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImage: { width: 105, height: 105, borderRadius: 16 },
+  editImageButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: colors.secondaryColor,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.primaryColor,
+  },
+  fieldGroup: { width: '100%', gap: 8 },
+  fieldGroupSpaced: { width: '100%', gap: 8, marginTop: 20 },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 20,
+    color: colors.whiteColor,
+  },
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  alertBox: {
+    width: '100%',
+    backgroundColor: colors.whiteColor,
+    borderRadius: 20,
+    overflow: 'hidden',
+    alignItems: 'center',
+    paddingTop: 24,
+  },
+  alertIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.lightPurpleColor,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  alertTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primaryColor,
+    marginBottom: 6,
+  },
+  alertSubtitle: {
+    fontSize: 13,
+    color: colors.darkGrey,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  alertDivider: {
+    height: 0.5,
+    backgroundColor: colors.lightGreyColor,
+    width: '100%',
+  },
+  alertOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  alertOptionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.lightPurpleColor,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertOptionText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.primaryColor,
+  },
+  alertOptionDivider: {
+    height: 0.5,
+    backgroundColor: colors.lightGreyColor,
+    width: '100%',
+  },
+  alertCancelRow: { width: '100%', paddingVertical: 15, alignItems: 'center' },
+  alertCancelText: { fontSize: 15, fontWeight: '500', color: colors.darkGrey },
 });

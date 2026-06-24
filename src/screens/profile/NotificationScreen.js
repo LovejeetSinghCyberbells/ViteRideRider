@@ -1,111 +1,166 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialDesignIcons from '@react-native-vector-icons/material-icons';
 import colors from '../../common/Colors';
 import NotificationCard from '../../components/NotificationCard';
+// Redux Hooks aur Thunks import kiye
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchNotifications,
+  markNotificationsAsRead,
+} from '../../redux/fetures/notificationSlice';
 
-const SAMPLE_NOTIFICATIONS = [
-    {
-        id: '1',
-        type: 'ride',
-        title: 'Ride Confirmed',
-        message: 'Your ride from Victoria Island to Murtala Airport has been confirmed. Driver is on the way.',
-        time: '2m ago',
-        isRead: false,
-    },
-    {
-        id: '2',
-        type: 'payment',
-        title: 'Payment Successful',
-        message: '₦4,500 has been deducted for your trip from Ikeja to Lekki Phase 1.',
-        time: '1h ago',
-        isRead: false,
-    },
-    {
-        id: '3',
-        type: 'alert',
-        title: 'Ride Cancelled',
-        message: 'Your driver cancelled the ride. Please book a new ride. We apologise for the inconvenience.',
-        time: '3h ago',
-        isRead: true,
-    },
-    {
-        id: '4',
-        type: 'promo',
-        title: '30% Off This Weekend!',
-        message: 'Use code VITE30 to get 30% off your next 3 rides this weekend only. Limited slots available.',
-        time: 'Yesterday',
-        isRead: false,
-    },
-    {
-        id: '5',
-        type: 'system',
-        title: 'Profile Updated',
-        message: 'Your profile information has been updated successfully.',
-        time: '2d ago',
-        isRead: true,
-    },
-];
+// Helper Utility to format dynamic time segments (e.g., 5m ago, 2h ago, Yesterday)
+const formatTimeAgo = dateString => {
+  if (!dateString) return '';
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffInMs = now - past;
+
+  const diffInMins = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMins < 1) return 'Just now';
+  if (diffInMins < 60) return `${diffInMins}m ago`;
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  if (diffInDays === 1) return 'Yesterday';
+  return past.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export default function NotificationScreen({ navigation }) {
-    return (
-        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+  const dispatch = useDispatch();
+  const { list, isLoading } = useSelector(state => state.notification);
 
-            <View style={styles.screenHeader}>
-                <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.goBack()}>
-                    <MaterialDesignIcons name="arrow-back-ios" size={24} color={colors.whiteColor} />
-                </TouchableOpacity>
-                <Text style={styles.screenTitle}>Notification</Text>
-                <View style={{ width: 24 }} />
-            </View>
+  useEffect(() => {
+    dispatch(fetchNotifications());
+  }, [dispatch]);
 
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                <View style={styles.notifications}>
-                    {SAMPLE_NOTIFICATIONS.map(notification => (
-                        <NotificationCard key={notification.id} notification={notification} />
-                    ))}
-                </View>
-            </ScrollView>
-        </SafeAreaView>
-    )
+  const handleMarkAllRead = () => {
+    // Sirf tab trigger hoga jab unread notifications available honge
+    const hasUnread = list.some(n => !n.isRead);
+    if (hasUnread) {
+      dispatch(markNotificationsAsRead());
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <View style={styles.screenHeader}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => navigation.goBack()}
+        >
+          <MaterialDesignIcons
+            name="arrow-back-ios"
+            size={24}
+            color={colors.whiteColor}
+          />
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Notification</Text>
+
+        {/* Dynamic Mark All Read Action Controller */}
+        <TouchableOpacity activeOpacity={0.7} onPress={handleMarkAllRead}>
+          <Text style={styles.markAllText}>Mark read</Text>
+        </TouchableOpacity>
+      </View>
+
+      {isLoading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={colors.secondaryColor} />
+        </View>
+      ) : list.length === 0 ? (
+        <View style={styles.loaderContainer}>
+          <MaterialDesignIcons
+            name="notifications-none"
+            size={48}
+            color={colors.lightGreyColor}
+          />
+          <Text style={styles.noDataText}>No notifications yet.</Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.notifications}>
+            {list.map(notification => {
+              // Adapting model enum schemas to match your generic NotificationCard types
+              let cardType = 'alert';
+              if (notification.type === 'ride_update') cardType = 'ride';
+              if (notification.type === 'payment') cardType = 'payment';
+              if (notification.type === 'general') cardType = 'promo';
+
+              const preparedData = {
+                id: notification._id,
+                type: cardType,
+                title: notification.title,
+                message: notification.message,
+                time: formatTimeAgo(notification.createdAt),
+                isRead: notification.isRead,
+              };
+
+              return (
+                <NotificationCard
+                  key={notification._id}
+                  notification={preparedData}
+                />
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
 }
 
-
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: colors.primaryColor,
-        paddingTop: 50,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingBottom: 50,
-        backgroundColor: colors.primaryColor,
-    },
-
-    screenHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        marginBottom: 4,
-    },
-    screenTitle: {
-        fontSize: 18,
-        lineHeight: 28,
-        fontWeight: '600',
-        color: colors.whiteColor,
-        flex: 1,
-        textAlign: 'center',
-    },
-    notifications: {
-        width: '100%',
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        gap: 12,
-    },
+  safeArea: { flex: 1, backgroundColor: colors.primaryColor, paddingTop: 50 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 50,
+    backgroundColor: colors.primaryColor,
+  },
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  screenTitle: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: colors.whiteColor,
+    flex: 1,
+    textAlign: 'center',
+    marginLeft: 24,
+  },
+  markAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.secondaryColor,
+  },
+  notifications: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  noDataText: { color: colors.lightGreyColor, fontSize: 16, fontWeight: '500' },
 });
